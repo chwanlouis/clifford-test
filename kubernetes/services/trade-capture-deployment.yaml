@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trade-capture-service
+  namespace: itms
+  labels:
+    app: trade-capture-service
+    tier: front-office
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: trade-capture-service
+  template:
+    metadata:
+      labels:
+        app: trade-capture-service
+        tier: front-office
+    spec:
+      containers:
+        - name: trade-capture-service
+          image: itms/trade-capture-service:latest
+          ports:
+            - containerPort: 8081
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: itms-db-secret
+                  key: host
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: itms-db-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: itms-db-secret
+                  key: password
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: itms-kafka-config
+                  key: bootstrap-servers
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trade-capture-service
+  namespace: itms
+spec:
+  selector:
+    app: trade-capture-service
+  ports:
+    - port: 8081
+      targetPort: 8081
+  type: ClusterIP

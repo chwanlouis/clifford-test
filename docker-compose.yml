@@ -1,0 +1,310 @@
+version: '3.9'
+
+services:
+  # Infrastructure
+  postgres:
+    image: postgres:15
+    container_name: itms-postgres
+    environment:
+      POSTGRES_USER: itms
+      POSTGRES_PASSWORD: itms
+      POSTGRES_DB: itms_trades
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations/V1__initial_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    networks:
+      - itms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U itms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: itms-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - itms-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: itms-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - itms-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: itms-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - itms-network
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: itms-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: itms-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - itms-network
+
+  # Front Office Services
+  trade-capture-service:
+    build:
+      context: ./services/trade-capture-service
+      dockerfile: Dockerfile
+    container_name: itms-trade-capture
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_PROFILES_ACTIVE: docker
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  oms-service:
+    build:
+      context: ./services/oms-service
+      dockerfile: Dockerfile
+    container_name: itms-oms
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  portfolio-service:
+    build:
+      context: ./services/portfolio-service
+      dockerfile: Dockerfile
+    container_name: itms-portfolio
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  # Middle Office Services
+  risk-engine:
+    build:
+      context: ./services/risk-engine
+      dockerfile: Dockerfile
+    container_name: itms-risk-engine
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      REDIS_HOST: redis
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  affirmation-service:
+    build:
+      context: ./services/affirmation-service
+      dockerfile: Dockerfile
+    container_name: itms-affirmation
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  compliance-service:
+    build:
+      context: ./services/compliance-service
+      dockerfile: Dockerfile
+    container_name: itms-compliance
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8086:8086"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  # Back Office Services
+  settlement-engine:
+    build:
+      context: ./services/settlement-engine
+      dockerfile: Dockerfile
+    container_name: itms-settlement
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8087:8087"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  corporate-actions-service:
+    build:
+      context: ./services/corporate-actions-service
+      dockerfile: Dockerfile
+    container_name: itms-corporate-actions
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  accounting-service:
+    build:
+      context: ./services/accounting-service
+      dockerfile: Dockerfile
+    container_name: itms-accounting
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8089:8089"
+    environment:
+      DB_HOST: postgres
+      DB_USER: itms
+      DB_PASSWORD: itms
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - itms-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: itms-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - trade-capture-service
+      - oms-service
+      - portfolio-service
+      - risk-engine
+      - settlement-engine
+    environment:
+      REACT_APP_TRADE_SERVICE_URL: http://localhost:8081
+      REACT_APP_OMS_SERVICE_URL: http://localhost:8082
+      REACT_APP_PORTFOLIO_SERVICE_URL: http://localhost:8083
+      REACT_APP_RISK_ENGINE_URL: http://localhost:8084
+      REACT_APP_SETTLEMENT_URL: http://localhost:8087
+    networks:
+      - itms-network
+
+volumes:
+  postgres_data:
+
+networks:
+  itms-network:
+    driver: bridge
