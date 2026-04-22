@@ -27,7 +27,7 @@ public class AffirmationController {
 
     @PostMapping("/match")
     public ResponseEntity<TradeMatch> matchTrades(@RequestBody TradeMatch ourTrade,
-                                                   @RequestParam String counterpartyRef) {
-        return ResponseEntity.ok(tradeMatchingService.matchTrades(ourTrade, ourTrade));
+                                                   @RequestBody TradeMatch counterpartyTrade) {
+        return ResponseEntity.ok(tradeMatchingService.matchTrades(ourTrade, counterpartyTrade));
     }
 }

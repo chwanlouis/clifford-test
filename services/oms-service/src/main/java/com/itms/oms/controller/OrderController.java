@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/orders")
@@ -20,9 +21,9 @@ public class OrderController {
     private final OrderSlicingService orderSlicingService;
 
     @PostMapping("/route")
-    public ResponseEntity<String> routeOrder(@Valid @RequestBody Order order) {
+    public ResponseEntity<Map<String, String>> routeOrder(@Valid @RequestBody Order order) {
         String venue = orderRoutingService.routeOrder(order);
-        return ResponseEntity.ok(venue);
+        return ResponseEntity.ok(Map.of("venue", venue));
     }
 
     @PostMapping("/slice")

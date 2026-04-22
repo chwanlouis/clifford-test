@@ -4,7 +4,7 @@
 -- ===========================
 -- Trade Capture Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_trades;
+CREATE DATABASE itms_trades;
 \c itms_trades;
 
 CREATE TABLE IF NOT EXISTS trades (
@@ -38,7 +38,7 @@ CREATE INDEX idx_trades_counterparty ON trades(counterparty);
 -- ===========================
 -- OMS Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_oms;
+CREATE DATABASE itms_oms;
 \c itms_oms;
 
 CREATE TABLE IF NOT EXISTS orders (
@@ -69,7 +69,7 @@ CREATE INDEX idx_orders_status ON orders(status);
 -- ===========================
 -- Portfolio Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_portfolio;
+CREATE DATABASE itms_portfolio;
 \c itms_portfolio;
 
 CREATE TABLE IF NOT EXISTS positions (
@@ -94,7 +94,7 @@ CREATE INDEX idx_positions_isin ON positions(isin);
 -- ===========================
 -- Risk Engine Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_risk;
+CREATE DATABASE itms_risk;
 \c itms_risk;
 
 CREATE TABLE IF NOT EXISTS risk_limits (
@@ -129,7 +129,7 @@ CREATE INDEX idx_risk_breaches_resolved ON risk_breaches(resolved);
 -- ===========================
 -- Affirmation Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_affirmation;
+CREATE DATABASE itms_affirmation;
 \c itms_affirmation;
 
 CREATE TABLE IF NOT EXISTS trade_matches (
@@ -154,7 +154,7 @@ CREATE INDEX idx_trade_matches_status ON trade_matches(status);
 -- ===========================
 -- Settlement Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_settlement;
+CREATE DATABASE itms_settlement;
 \c itms_settlement;
 
 CREATE TABLE IF NOT EXISTS settlement_instructions (
@@ -184,7 +184,7 @@ CREATE INDEX idx_settlement_date ON settlement_instructions(settlement_date);
 -- ===========================
 -- Corporate Actions Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_corporate_actions;
+CREATE DATABASE itms_corporate_actions;
 \c itms_corporate_actions;
 
 CREATE TABLE IF NOT EXISTS corporate_actions (
@@ -215,7 +215,7 @@ CREATE INDEX idx_ca_payment_date ON corporate_actions(payment_date);
 -- ===========================
 -- Accounting Database
 -- ===========================
-CREATE DATABASE IF NOT EXISTS itms_accounting;
+CREATE DATABASE itms_accounting;
 \c itms_accounting;
 
 CREATE TABLE IF NOT EXISTS accounts (
