@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: corporate-actions-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/itms_corporate_actions
+    username: ${DB_USER:itms}
+    password: ${DB_PASSWORD:itms}
+  jpa:
+    hibernate:
+      ddl-auto: update
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+server:
+  port: 8088
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
