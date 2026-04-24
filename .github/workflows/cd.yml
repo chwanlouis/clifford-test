@@ -1,0 +1,185 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+  EKS_CLUSTER_NAME: itms-cluster-production
+
+jobs:
+  build-and-push:
+    name: Build & Push Docker Images to ECR
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - trade-capture-service
+          - oms-service
+          - portfolio-service
+          - risk-engine
+          - affirmation-service
+          - compliance-service
+          - settlement-engine
+          - corporate-actions-service
+          - accounting-service
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/itms/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: services/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-and-push-frontend:
+    name: Build & Push Frontend Image to ECR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/itms/frontend
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Amazon EKS
+    runs-on: ubuntu-latest
+    needs:
+      - build-and-push
+      - build-and-push-frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Set image tag
+        id: image-tag
+        run: echo "tag=$(echo ${{ github.sha }} | head -c 7)" >> "$GITHUB_OUTPUT"
+
+      - name: Apply Kubernetes namespace and config
+        run: |
+          kubectl apply -f kubernetes/namespace.yaml
+          kubectl apply -f kubernetes/configmap-secret.yaml
+
+      - name: Apply Kubernetes service manifests
+        run: kubectl apply -f kubernetes/services/
+
+      - name: Apply PostgreSQL manifest
+        run: kubectl apply -f kubernetes/postgres.yaml
+
+      - name: Roll out updated images
+        env:
+          IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
+        run: |
+          SERVICES=(
+            trade-capture-service
+            oms-service
+            portfolio-service
+            risk-engine
+            affirmation-service
+            compliance-service
+            settlement-engine
+            corporate-actions-service
+            accounting-service
+          )
+          for SERVICE in "${SERVICES[@]}"; do
+            kubectl set image deployment/"$SERVICE" \
+              "$SERVICE"="${{ env.ECR_REGISTRY }}/itms/${SERVICE}:${IMAGE_TAG}" \
+              -n itms
+          done
+          kubectl set image deployment/frontend \
+            frontend="${{ env.ECR_REGISTRY }}/itms/frontend:${IMAGE_TAG}" \
+            -n itms
+
+      - name: Wait for rollouts to complete
+        run: |
+          SERVICES=(
+            trade-capture-service
+            oms-service
+            portfolio-service
+            risk-engine
+            affirmation-service
+            compliance-service
+            settlement-engine
+            corporate-actions-service
+            accounting-service
+            frontend
+          )
+          for SERVICE in "${SERVICES[@]}"; do
+            kubectl rollout status deployment/"$SERVICE" -n itms --timeout=5m
+          done
