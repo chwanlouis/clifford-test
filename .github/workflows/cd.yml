@@ -14,6 +14,8 @@ jobs:
   build-and-push:
     name: Build & Push Docker Images to ECR
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         service:
@@ -26,8 +28,6 @@ jobs:
           - settlement-engine
           - corporate-actions-service
           - accounting-service
-    outputs:
-      image-tag: ${{ steps.meta.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -68,6 +68,8 @@ jobs:
   build-and-push-frontend:
     name: Build & Push Frontend Image to ECR
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -107,6 +109,8 @@ jobs:
   deploy:
     name: Deploy to Amazon EKS
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs:
       - build-and-push
       - build-and-push-frontend
